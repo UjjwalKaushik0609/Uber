@@ -220,7 +220,6 @@ if uploaded_file:
             st.markdown(f"**Selected Model:** `{model_choice}`")
             st.success(f"**Accuracy:** `{acc:.2f}%`")
 
-            # Display a more useful classification report
             st.subheader("Detailed Performance Metrics")
             report = classification_report(y_test, preds, output_dict=True)
             report_df = pd.DataFrame(report).transpose()
@@ -241,7 +240,6 @@ if uploaded_file:
             
             st.markdown("---")
 
-            # --- Predict a New Booking Section with a simplified UI ---
             st.subheader("Predict a New Booking")
             st.markdown("Enter the details for a new ride to get a prediction.")
 
