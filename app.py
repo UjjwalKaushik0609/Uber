@@ -24,7 +24,7 @@ st.title("🚕 Uber Ride Bookings Dashboard & ML Prediction")
 # -------------------------------
 # Upload Dataset
 # -------------------------------
-uploaded_file = st.file_uploader("ncr_ride_bookings.csv", type=["csv"])
+uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 
@@ -100,13 +100,17 @@ if uploaded_file is not None:
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
-    # 1️⃣ Daily rides & revenue
-    if "Date" in df.columns and "Booking ID" in df.columns and "Booking Value" in df.columns:
+    # 1️⃣ Daily rides & revenue (FIXED)
+    if "Date" in df.columns and "Booking Value" in df.columns:
         st.write("### Daily Rides & Revenue")
-        daily_stats = df.groupby("Date").agg({"Booking ID": "count", "Booking Value": "sum"}).reset_index()
+        
+        rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
+        revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
+        daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
+
         fig, ax = plt.subplots(figsize=(10,5))
-        ax.plot(daily_stats["Date"], daily_stats["Booking ID"], label="Total Rides", color="blue")
-        ax.plot(daily_stats["Date"], daily_stats["Booking Value"], label="Total Revenue", color="green")
+        ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
+        ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
         ax.legend()
         st.pyplot(fig)
 
