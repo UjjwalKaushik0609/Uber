@@ -164,67 +164,87 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
     # -------------------------------
-    # ML Prediction Section
+# ML Prediction Section
+# -------------------------------
+st.subheader("🤖 Predict Booking Status")
+
+target_col = "Booking Status"
+
+if uploaded_file is not None and target_col in df.columns:
     # -------------------------------
-    st.subheader("🤖 Predict Booking Status")
+    # Prepare Features (X) & Target (y)
+    # -------------------------------
+    X = df.drop(columns=[target_col])
 
-    target_col = "Booking Status"
-    if target_col in df.columns:
-        X = df.drop(columns=[target_col])
-        y = df[target_col]
+    # Drop datetime columns from features
+    datetime_cols = X.select_dtypes(include=["datetime64[ns]"]).columns
+    X = X.drop(columns=datetime_cols, errors="ignore")
 
-        # Encode categorical features
-        label_encoders = {}
-        for col in X.columns:
-            if X[col].dtype == "object":
-                le = LabelEncoder()
-                X[col] = le.fit_transform(X[col].astype(str))
-                label_encoders[col] = le
+    y = df[target_col]
 
-        # Encode target labels
-        target_encoder = LabelEncoder()
-        y = target_encoder.fit_transform(y)
+    # -------------------------------
+    # Encode categorical features
+    # -------------------------------
+    label_encoders = {}
+    for col in X.columns:
+        if X[col].dtype == "object":
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col].astype(str))
+            label_encoders[col] = le
 
-        # Ensure numeric
-        X = X.apply(pd.to_numeric, errors="coerce").fillna(0).astype(float)
+    # Encode target labels
+    target_encoder = LabelEncoder()
+    y = target_encoder.fit_transform(y)
 
-        # Scale
-        scaler = StandardScaler()
-        X = scaler.fit_transform(X)
+    # -------------------------------
+    # Ensure numeric + scale
+    # -------------------------------
+    X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-        # Train-test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+
+    # -------------------------------
+    # Train-Test Split
+    # -------------------------------
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # -------------------------------
+    # Models
+    # -------------------------------
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=500),
+        "Decision Tree": DecisionTreeClassifier(),
+        "Random Forest": RandomForestClassifier(),
+        "Naive Bayes": GaussianNB(),
+        "SVM": SVC(),
+        "KNN": KNeighborsClassifier()
+    }
+
+    model_choice = st.selectbox("Select Model", list(models.keys()))
+    model = models[model_choice]
+
+    # -------------------------------
+    # Train & Evaluate
+    # -------------------------------
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds) * 100
+
+    st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
+
+    # Feature importance (for trees)
+    if model_choice in ["Decision Tree", "Random Forest"]:
+        st.write("### 🔎 Feature Importance")
+        feature_importances = pd.Series(
+            model.feature_importances_,
+            index=df.drop(columns=[target_col] + list(datetime_cols), errors="ignore").columns
         )
-
-        models = {
-            "Logistic Regression": LogisticRegression(max_iter=500),
-            "Decision Tree": DecisionTreeClassifier(),
-            "Random Forest": RandomForestClassifier(),
-            "Naive Bayes": GaussianNB(),
-            "SVM": SVC(),
-            "KNN": KNeighborsClassifier()
-        }
-
-        model_choice = st.selectbox("Select Model", list(models.keys()))
-        model = models[model_choice]
-
-        model.fit(X_train, y_train)
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds) * 100
-
-        st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
-
-        if model_choice in ["Decision Tree", "Random Forest"]:
-            st.write("### 🔎 Feature Importance")
-            feature_importances = pd.Series(
-                model.feature_importances_,
-                index=df.drop(columns=[target_col]).columns
-            )
-            fig, ax = plt.subplots()
-            feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
-            st.pyplot(fig)
+        fig, ax = plt.subplots()
+        feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
+        st.pyplot(fig)
 
 else:
     st.info("👆 Upload a CSV file to get started.")
-
