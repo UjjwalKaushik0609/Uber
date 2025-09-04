@@ -118,17 +118,30 @@ if uploaded_file is not None:
             )
 
         # -------------------------------
-        # Run Prediction
+        # Run Prediction (FIXED VERSION)
         # -------------------------------
         if st.button("🔮 Predict Booking Status"):
             input_df = pd.DataFrame([input_data])
 
+            # Apply label encoders where needed
             for col in input_df.columns:
                 if col in label_encoders:
                     input_df[col] = label_encoders[col].transform(input_df[col].astype(str))
 
-            input_scaled = scaler.transform(input_df)
+            # ✅ Rebuild full feature set (same columns as training)
+            full_input = pd.DataFrame(columns=df.drop(columns=[target_col]).columns)
+            for col in full_input.columns:
+                if col in input_df.columns:
+                    full_input.at[0, col] = input_df[col].values[0]
+                else:
+                    full_input.at[0, col] = 0  # default for missing
 
+            full_input = full_input.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+            # Scale using trained scaler
+            input_scaled = scaler.transform(full_input)
+
+            # Predict
             prediction = model.predict(input_scaled)[0]
             st.success(f"🚕 Predicted Booking Status: **{prediction}**")
 
