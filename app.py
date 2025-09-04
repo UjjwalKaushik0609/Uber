@@ -219,6 +219,12 @@ if uploaded_file:
 
             st.markdown(f"**Selected Model:** `{model_choice}`")
             st.success(f"**Accuracy:** `{acc:.2f}%`")
+
+            # Display a more useful classification report
+            st.subheader("Detailed Performance Metrics")
+            report = classification_report(y_test, preds, output_dict=True)
+            report_df = pd.DataFrame(report).transpose()
+            st.dataframe(report_df.style.background_gradient(cmap='YlOrRd'))
             
             if model_choice in ["Decision Tree", "Random Forest"]:
                 st.markdown("---")
@@ -239,7 +245,6 @@ if uploaded_file:
             st.subheader("Predict a New Booking")
             st.markdown("Enter the details for a new ride to get a prediction.")
 
-            # Create a simplified set of user inputs for prediction
             input_data = {}
             col1, col2 = st.columns(2)
             
@@ -315,5 +320,6 @@ if uploaded_file:
                     input_scaled = scaler.transform(final_input_df)
                     prediction = model.predict(input_scaled)
                     st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
+
 else:
     st.info("👆 Upload a CSV file to get started.")
