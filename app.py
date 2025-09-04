@@ -1,10 +1,7 @@
-# app.py
 import streamlit as st
 import pandas as pd
-import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
-
+import seaborn as sns
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.linear_model import LogisticRegression
@@ -16,234 +13,148 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 
 # -------------------------------
-# Streamlit Config
+# Load Data
 # -------------------------------
-st.set_page_config(page_title="Uber Ride Bookings Analysis", layout="wide")
-st.title("🚕 Uber Ride Bookings Dashboard & ML Prediction")
+@st.cache_data
+def load_data():
+    return pd.read_csv("uber.csv")
+
+df = load_data()
+
+st.title("🚖 Uber Ride Analytics & Prediction Dashboard")
 
 # -------------------------------
-# Upload Dataset
+# Data Preview
 # -------------------------------
-uploaded_file = st.file_uploader("📂 Upload your CSV file", type=["csv"])
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+st.subheader("📊 Dataset Overview")
+st.write(df.head())
 
-    st.subheader("📊 Raw Data Preview")
-    st.dataframe(df.head())
+# -------------------------------
+# ML Section
+# -------------------------------
+st.subheader("🤖 ML Model Training & Prediction")
 
-    # -------------------------------
-    # Data Cleaning
-    # -------------------------------
-    st.subheader("🧹 Data Cleaning")
+target_col = "Booking Status"
+if target_col in df.columns:
 
-    df.drop_duplicates(inplace=True)
-    df.fillna("Unknown", inplace=True)
+    # Features + target
+    X = df.drop(columns=[target_col])
+    y = df[target_col]
 
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df["Year"] = df["Date"].dt.year
-        df["Month"] = df["Date"].dt.month
-        df["Day"] = df["Date"].dt.day
+    # Encode categoricals
+    label_encoders = {}
+    for col in X.columns:
+        if X[col].dtype == "object":
+            le = LabelEncoder()
+            X[col] = le.fit_transform(X[col].astype(str))
+            label_encoders[col] = le
 
-    if "Time" in df.columns:
-        df["Time"] = pd.to_datetime(df["Time"], errors="coerce")
-        df["Hour"] = df["Time"].dt.hour
-        df["Minute"] = df["Time"].dt.minute
+    # Ensure numeric
+    X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-    leakage_cols = [
-        "Reason for cancelling by Customer",
-        "Driver Cancellation Reason",
-        "Customer Rating",
-        "Driver Ratings",
-        "Cancelled Rides by Customer",
-        "Cancelled Rides by Driver",
-        "Incomplete Rides",
-        "Incomplete Rides Reason"
-    ]
-    df.drop(columns=[col for col in leakage_cols if col in df.columns], inplace=True, errors="ignore")
+    # Scale
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
 
-    st.success("✅ Data cleaned successfully!")
-
-    # -------------------------------
-    # Download Cleaned Dataset
-    # -------------------------------
-    st.write("📥 Download Cleaned Data")
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        label="⬇️ Download Cleaned CSV",
-        data=csv,
-        file_name="cleaned_ride_bookings.csv",
-        mime="text/csv",
+    # Split
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
     )
 
-    # -------------------------------
-    # Sidebar Filters
-    # -------------------------------
-    st.sidebar.header("🔎 Filters")
+    # Models
+    models = {
+        "Logistic Regression": LogisticRegression(max_iter=500),
+        "Decision Tree": DecisionTreeClassifier(),
+        "Random Forest": RandomForestClassifier(),
+        "Naive Bayes": GaussianNB(),
+        "SVM": SVC(),
+        "KNN": KNeighborsClassifier(),
+    }
 
-    if "Date" in df.columns:
-        min_date, max_date = df["Date"].min(), df["Date"].max()
-        date_range = st.sidebar.date_input("Select Date Range", [min_date, max_date])
-        if len(date_range) == 2:
-            df = df[(df["Date"] >= pd.to_datetime(date_range[0])) & (df["Date"] <= pd.to_datetime(date_range[1]))]
+    model_choice = st.selectbox("Select Model", list(models.keys()))
+    model = models[model_choice]
 
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    acc = accuracy_score(y_test, preds) * 100
+    st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
+
+    # -------------------------------
+    # User-Friendly Prediction Form
+    # -------------------------------
+    st.write("### 🎯 Try a Prediction")
+
+    input_data = {}
+
+    # Vehicle Type
     if "Vehicle Type" in df.columns:
-        vehicle_filter = st.sidebar.multiselect("Select Vehicle Types", df["Vehicle Type"].unique(), default=df["Vehicle Type"].unique())
-        df = df[df["Vehicle Type"].isin(vehicle_filter)]
+        input_data["Vehicle Type"] = st.selectbox(
+            "Select Vehicle Type", df["Vehicle Type"].dropna().unique()
+        )
 
-    if "Booking Status" in df.columns:
-        status_filter = st.sidebar.multiselect("Select Booking Status", df["Booking Status"].unique(), default=df["Booking Status"].unique())
-        df = df[df["Booking Status"].isin(status_filter)]
+    # Pickup Location
+    if "Pickup Location" in df.columns:
+        input_data["Pickup Location"] = st.selectbox(
+            "Select Pickup Location", df["Pickup Location"].dropna().unique()
+        )
+
+    # Drop Location
+    if "Drop Location" in df.columns:
+        input_data["Drop Location"] = st.selectbox(
+            "Select Drop Location", df["Drop Location"].dropna().unique()
+        )
+
+    # Payment Method
+    if "Payment Method" in df.columns:
+        input_data["Payment Method"] = st.radio(
+            "Select Payment Method", df["Payment Method"].dropna().unique()
+        )
+
+    # Ride Distance
+    if "Ride Distance" in df.columns:
+        min_val = int(df["Ride Distance"].min())
+        max_val = int(df["Ride Distance"].max())
+        input_data["Ride Distance"] = st.slider(
+            "Select Ride Distance (km)", min_val, max_val, step=1
+        )
+
+    # Booking Value
+    if "Booking Value" in df.columns:
+        min_val = int(df["Booking Value"].min())
+        max_val = int(df["Booking Value"].max())
+        input_data["Booking Value"] = st.slider(
+            "Select Booking Value (₹)", min_val, max_val, step=50
+        )
 
     # -------------------------------
-    # EDA Visualizations
+    # Run Prediction
     # -------------------------------
-    st.subheader("📈 Exploratory Data Analysis")
+    if st.button("🔮 Predict Booking Status"):
+        input_df = pd.DataFrame([input_data])
 
-    # 1️⃣ Daily rides & revenue
-    if "Date" in df.columns and "Booking Value" in df.columns:
-        st.write("### Daily Rides & Revenue")
-        df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
-        rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
-        revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
-        daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
+        # Apply encoders
+        for col in input_df.columns:
+            if col in label_encoders:
+                input_df[col] = label_encoders[col].transform(input_df[col].astype(str))
 
-        fig, ax = plt.subplots(figsize=(10,5))
-        ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
-        ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
-        ax.legend()
-        st.pyplot(fig)
+        # Scale
+        input_scaled = scaler.transform(input_df)
 
-    # 2️⃣ Booking Status
-    if "Booking Status" in df.columns:
-        st.write("### Booking Status Distribution")
+        # Predict
+        prediction = model.predict(input_scaled)[0]
+        st.success(f"🚕 Predicted Booking Status: **{prediction}**")
+
+    # -------------------------------
+    # Feature Importance
+    # -------------------------------
+    if model_choice in ["Decision Tree", "Random Forest"]:
+        st.write("### 🔑 Feature Importance")
+        feature_importances = pd.Series(
+            model.feature_importances_, index=df.drop(columns=[target_col]).columns
+        )
         fig, ax = plt.subplots()
-        sns.countplot(x="Booking Status", data=df, ax=ax, palette="viridis")
+        feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
         st.pyplot(fig)
-
-    # 3️⃣ Vehicle Type
-    if "Vehicle Type" in df.columns:
-        st.write("### Vehicle Type Distribution")
-        fig, ax = plt.subplots()
-        sns.countplot(x="Vehicle Type", data=df, order=df['Vehicle Type'].value_counts().index, palette="coolwarm")
-        plt.xticks(rotation=45)
-        st.pyplot(fig)
-
-    # 4️⃣ Top Pickup & Drop
-    if "Pickup Location" in df.columns and "Drop Location" in df.columns:
-        st.write("### Top 10 Pickup & Drop Locations")
-        top_pickups = df["Pickup Location"].value_counts().head(10)
-        top_drops = df["Drop Location"].value_counts().head(10)
-        fig, axes = plt.subplots(1, 2, figsize=(14,5))
-        sns.barplot(x=top_pickups.values, y=top_pickups.index, ax=axes[0], palette="Blues_r")
-        sns.barplot(x=top_drops.values, y=top_drops.index, ax=axes[1], palette="Greens_r")
-        axes[0].set_title("Pickup Locations")
-        axes[1].set_title("Drop Locations")
-        st.pyplot(fig)
-
-    # 5️⃣ Correlation Heatmap
-    num_cols = df.select_dtypes(include=[np.number]).columns
-    if len(num_cols) > 1:
-        st.write("### Correlation Heatmap")
-        fig, ax = plt.subplots(figsize=(8,6))
-        sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
-        st.pyplot(fig)
-
-    # -------------------------------
-    # ML Prediction Section
-    # -------------------------------
-    st.subheader("🤖 Predict Booking Status")
-
-    target_col = "Booking Status"
-    if target_col in df.columns:
-        X = df.drop(columns=[target_col])
-        y = df[target_col]
-
-        # Encode categorical
-        label_encoders = {}
-        for col in X.columns:
-            if X[col].dtype == "object":
-                le = LabelEncoder()
-                X[col] = le.fit_transform(X[col].astype(str))
-                label_encoders[col] = le
-
-        # 🔑 Ensure all features are numeric
-        X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
-
-        # Scale numeric
-        scaler = StandardScaler()
-        X = scaler.fit_transform(X)
-
-        # Train-test split
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-        models = {
-            "Logistic Regression": LogisticRegression(max_iter=500),
-            "Decision Tree": DecisionTreeClassifier(),
-            "Random Forest": RandomForestClassifier(),
-            "Naive Bayes": GaussianNB(),
-            "SVM": SVC(),
-            "KNN": KNeighborsClassifier()
-        }
-
-        model_choice = st.selectbox("Select Model", list(models.keys()))
-        model = models[model_choice]
-        model.fit(X_train, y_train)
-
-        preds = model.predict(X_test)
-        acc = accuracy_score(y_test, preds) * 100
-        st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
-
-        # -------------------------------
-        # 🔮 Single Prediction Form
-        # -------------------------------
-        st.write("### Try a Prediction")
-
-        input_data = {}
-        for col in df.drop(columns=[target_col]).columns:
-            if df[col].dtype == "object":
-                input_data[col] = st.selectbox(f"Select {col}", df[col].unique())
-            else:
-                # Handle numeric safely
-                col_series = pd.to_numeric(df[col], errors="coerce")
-                if col_series.notna().any():
-                    col_min = float(col_series.min(skipna=True))
-                    col_max = float(col_series.max(skipna=True))
-                else:
-                    col_min, col_max = 0.0, 100.0  # fallback range
-
-                default_val = (col_min + col_max) / 2
-                input_data[col] = st.number_input(
-                    f"Enter {col}",
-                    min_value=col_min,
-                    max_value=col_max,
-                    value=default_val
-                )
-
-        if st.button("Predict Booking Status"):
-            input_df = pd.DataFrame([input_data])
-
-            # Apply encoders
-            for col in input_df.columns:
-                if col in label_encoders:
-                    input_df[col] = label_encoders[col].transform(input_df[col].astype(str))
-
-            # Scale
-            input_scaled = scaler.transform(input_df)
-
-            # Prediction
-            prediction = model.predict(input_scaled)[0]
-            st.success(f"🚖 Predicted Booking Status: **{prediction}**")
-
-        # -------------------------------
-        # Feature Importance
-        # -------------------------------
-        if model_choice in ["Decision Tree", "Random Forest"]:
-            st.write("### Feature Importance")
-            feature_importances = pd.Series(model.feature_importances_, index=df.drop(columns=[target_col]).columns)
-            fig, ax = plt.subplots()
-            feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
-            st.pyplot(fig)
 
 else:
-    st.info("👆 Upload a CSV file to get started.")
+    st.error("❌ 'Booking Status' column not found in dataset.")
