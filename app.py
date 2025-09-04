@@ -6,13 +6,8 @@ import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, classification_report
 
 # --- Streamlit Configuration ---
 st.set_page_config(
@@ -81,7 +76,6 @@ if uploaded_file:
     df = load_and_clean_data(uploaded_file)
     
     if df is not None:
-        # --- Section 1: Data Overview ---
         st.header("1. Data Overview")
         st.info("A preview of the raw data after initial cleaning.")
         st.dataframe(df.head())
@@ -94,7 +88,6 @@ if uploaded_file:
             mime="text/csv",
         )
         
-        # --- Section 2: Exploratory Data Analysis (EDA) ---
         st.header("2. Exploratory Data Analysis (EDA)")
 
         if "Date" in df.columns and "Booking Value" in df.columns:
@@ -118,33 +111,8 @@ if uploaded_file:
                 ax.set_title("Booking Status")
                 st.pyplot(fig)
 
-        if "Vehicle Type" in df.columns:
-            with col2:
-                st.subheader("Vehicle Type Popularity")
-                fig, ax = plt.subplots()
-                sns.countplot(y="Vehicle Type", data=df, order=df['Vehicle Type'].value_counts().index, palette="coolwarm")
-                ax.set_title("Vehicle Type")
-                st.pyplot(fig)
-        
-        st.markdown("---")
-        
-        if "Pickup Location" in df.columns and "Drop Location" in df.columns:
-            st.subheader("Top Locations")
-            top_pickups = df["Pickup Location"].value_counts().head(10)
-            top_drops = df["Drop Location"].value_counts().head(10)
-            
-            col_pickup, col_drop = st.columns(2)
-            
-            with col_pickup:
-                st.markdown("#### Top 10 Pickup Locations")
-                st.bar_chart(top_pickups)
-                
-            with col_drop:
-                st.markdown("#### Top 10 Drop Locations")
-                st.bar_chart(top_drops)
-        
-        st.markdown("---")
-        
+            st.markdown("---")
+
         st.subheader("Ratings Distribution")
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         
@@ -163,7 +131,7 @@ if uploaded_file:
                 sns.histplot(ratings_numeric, kde=True, ax=axes[1], color="green")
                 axes[1].set_title("Customer Ratings")
             else:
-                axes[1].set_title("Customer Ratings (No Data)")
+                axes[1].set_title("Customer Rating (No Data)")
                 axes[1].text(0.5, 0.5, 'No numeric data to display', ha='center', va='center')
         
         st.pyplot(fig)
@@ -192,29 +160,35 @@ if uploaded_file:
                 
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(X_encoded)
-                return X_scaled, le_dict, scaler
+                
+                # Check for imbalance and calculate scale_pos_weight
+                unique_classes, counts = np.unique(target_y, return_counts=True)
+                if len(counts) == 2:
+                    pos_class_name = unique_classes[1] if counts[1] < counts[0] else unique_classes[0]
+                    neg_class_name = unique_classes[0] if counts[1] < counts[0] else unique_classes[1]
+                    scale_pos_weight = counts[np.where(unique_classes == neg_class_name)[0][0]] / counts[np.where(unique_classes == pos_class_name)[0][0]]
+                else:
+                    scale_pos_weight = 1
+                
+                return X_scaled, le_dict, scaler, scale_pos_weight
 
-            X_scaled, label_encoders, scaler = preprocess_for_ml(X, y)
+            X_scaled, label_encoders, scaler, scale_pos_weight = preprocess_for_ml(X, y)
             X_train, X_test, y_train, y_test = train_test_split(
                 X_scaled, y, test_size=0.2, random_state=42
             )
 
             models = {
-                "Random Forest": RandomForestClassifier(random_state=42, class_weight='balanced'),
-                "Logistic Regression": LogisticRegression(max_iter=500, class_weight='balanced'),
-                "Decision Tree": DecisionTreeClassifier(random_state=42, class_weight='balanced'),
-                "SVM": SVC(random_state=42),
-                "KNN": KNeighborsClassifier(),
-                "Naive Bayes": GaussianNB(),
+                "XGBoost Classifier": XGBClassifier(random_state=42, scale_pos_weight=scale_pos_weight, use_label_encoder=False, eval_metric='logloss'),
             }
 
             st.subheader("Model Performance")
-            st.markdown("⚠️ **Note:** For imbalanced data, models like Random Forest are trained with a balanced class weight to improve predictions for the minority class ('Incomplete').")
+            st.markdown("⚠️ **Note:** The XGBoost model is trained to specifically handle imbalanced data, improving predictions for the minority class ('Incomplete').")
             model_choice = st.selectbox("Choose a model to train:", list(models.keys()))
             model = models[model_choice]
 
-            model.fit(X_train, y_train)
-            preds = model.predict(X_test)
+            model.fit(X_train, label_encoders[target_col].transform(y_train))
+            preds_encoded = model.predict(X_test)
+            preds = label_encoders[target_col].inverse_transform(preds_encoded)
             acc = accuracy_score(y_test, preds) * 100
 
             st.markdown(f"**Selected Model:** `{model_choice}`")
@@ -224,19 +198,6 @@ if uploaded_file:
             report = classification_report(y_test, preds, output_dict=True)
             report_df = pd.DataFrame(report).transpose()
             st.dataframe(report_df.style.background_gradient(cmap='YlOrRd'))
-            
-            if model_choice in ["Decision Tree", "Random Forest"]:
-                st.markdown("---")
-                st.subheader("Feature Importance")
-                feature_importances = pd.Series(
-                    model.feature_importances_, index=X.columns
-                )
-                fig, ax = plt.subplots(figsize=(10, 6))
-                feature_importances.sort_values(ascending=False).head(10).plot(
-                    kind="barh", ax=ax
-                )
-                ax.set_title("Top 10 Most Important Features")
-                st.pyplot(fig)
             
             st.markdown("---")
 
@@ -316,7 +277,9 @@ if uploaded_file:
                                 st.stop()
                     
                     input_scaled = scaler.transform(final_input_df)
-                    prediction = model.predict(input_scaled)
+                    prediction_encoded = model.predict(input_scaled)
+                    prediction = label_encoders[target_col].inverse_transform(prediction_encoded)
+                    
                     st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
 
 else:
