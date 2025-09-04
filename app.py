@@ -47,17 +47,14 @@ def load_and_clean_data(uploaded_file):
         st.error(f"Error loading the file: {e}")
         return None
 
-    # Drop duplicates and fill missing values with "Unknown"
     df.drop_duplicates(inplace=True)
     df.fillna("Unknown", inplace=True)
 
-    # Convert date and time columns
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     if "Time" in df.columns:
         df["Time"] = pd.to_datetime(df["Time"], errors="coerce")
 
-    # Drop potential data leakage columns
     leakage_cols = [
         "Reason for cancelling by Customer", "Driver Cancellation Reason",
         "Cancelled Rides by Customer", "Cancelled Rides by Driver",
@@ -66,12 +63,10 @@ def load_and_clean_data(uploaded_file):
     df.drop(columns=[col for col in leakage_cols if col in df.columns],
             inplace=True, errors="ignore")
 
-    # Convert all numerical columns to numeric type
     numeric_cols = ["Driver Ratings", "Customer Rating", "Booking Value", "Ride Distance", "Avg VTAT", "Avg CTAT"]
     for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-            # Fill NaNs with the mean if not empty, otherwise a default value
             if not df[col].empty and not df[col].isna().all():
                 df[col].fillna(df[col].mean(), inplace=True)
             else:
@@ -102,7 +97,6 @@ if uploaded_file:
         # --- Section 2: Exploratory Data Analysis (EDA) ---
         st.header("2. Exploratory Data Analysis (EDA)")
 
-        # Daily rides and revenue
         if "Date" in df.columns and "Booking Value" in df.columns:
             st.subheader("Daily Rides & Revenue Over Time")
             daily_stats = (
@@ -182,7 +176,6 @@ if uploaded_file:
         target_col = "Booking Status"
         
         if target_col in df.columns:
-            # Drop non-feature columns
             X = df.drop(columns=[target_col, "Date", "Time", "Booking ID", "Customer ID"], errors='ignore')
             y = df[target_col]
 
@@ -207,15 +200,16 @@ if uploaded_file:
             )
 
             models = {
-                "Random Forest": RandomForestClassifier(random_state=42),
-                "Logistic Regression": LogisticRegression(max_iter=500),
-                "Decision Tree": DecisionTreeClassifier(random_state=42),
+                "Random Forest": RandomForestClassifier(random_state=42, class_weight='balanced'),
+                "Logistic Regression": LogisticRegression(max_iter=500, class_weight='balanced'),
+                "Decision Tree": DecisionTreeClassifier(random_state=42, class_weight='balanced'),
                 "SVM": SVC(random_state=42),
                 "KNN": KNeighborsClassifier(),
                 "Naive Bayes": GaussianNB(),
             }
 
             st.subheader("Model Performance")
+            st.markdown("⚠️ **Note:** For imbalanced data, models like Random Forest are trained with a balanced class weight to improve predictions for the minority class ('Incomplete').")
             model_choice = st.selectbox("Choose a model to train:", list(models.keys()))
             model = models[model_choice]
 
@@ -249,62 +243,67 @@ if uploaded_file:
             input_data = {}
             col1, col2 = st.columns(2)
             
-            # Simplified Categorical Inputs
-            if 'Pickup Location' in df.columns:
-                with col1:
-                    input_data['Pickup Location'] = st.selectbox("Select Pickup Location", options=[''] + sorted(list(df['Pickup Location'].unique())))
-            if 'Drop Location' in df.columns:
-                with col1:
-                    input_data['Drop Location'] = st.selectbox("Select Drop Location", options=[''] + sorted(list(df['Drop Location'].unique())))
-            if 'Vehicle Type' in df.columns:
-                with col1:
-                    input_data['Vehicle Type'] = st.selectbox("Select Vehicle Type", options=sorted(list(df['Vehicle Type'].unique())))
+            with col1:
+                if 'Pickup Location' in df.columns:
+                    input_data['Pickup Location'] = st.selectbox(
+                        "Select Pickup Location",
+                        options=[''] + sorted(list(df['Pickup Location'].unique())),
+                        help="Choose the pickup point for the new ride."
+                    )
+                if 'Drop Location' in df.columns:
+                    input_data['Drop Location'] = st.selectbox(
+                        "Select Drop Location",
+                        options=[''] + sorted(list(df['Drop Location'].unique())),
+                        help="Choose the destination for the new ride."
+                    )
+                if 'Vehicle Type' in df.columns:
+                    input_data['Vehicle Type'] = st.selectbox(
+                        "Select Vehicle Type",
+                        options=sorted(list(df['Vehicle Type'].unique())),
+                        help="Choose the type of vehicle (e.g., Bike, Auto, Car)."
+                    )
 
-            # Simplified Numerical Inputs
-            if 'Ride Distance' in df.columns:
-                with col2:
+            with col2:
+                if 'Ride Distance' in df.columns:
                     input_data['Ride Distance'] = st.number_input(
                         "Ride Distance (km)",
                         min_value=0.1,
                         max_value=100.0,
                         value=df['Ride Distance'].mean() if not df['Ride Distance'].empty and not df['Ride Distance'].isna().all() else 5.0,
-                        help="Enter the estimated distance of the ride in kilometers."
+                        help="Enter the estimated distance of the ride."
                     )
-            if 'Customer Rating' in df.columns:
-                with col2:
+                if 'Customer Rating' in df.columns:
                     input_data['Customer Rating'] = st.slider(
                         "Customer Rating",
                         min_value=1.0,
                         max_value=5.0,
                         value=df['Customer Rating'].mean() if not df['Customer Rating'].empty and not df['Customer Rating'].isna().all() else 4.5,
-                        help="Enter the customer's average rating (1-5)."
+                        help="Enter the customer's rating (1-5)."
                     )
-            if 'Payment Method' in df.columns:
-                with col2:
-                    input_data['Payment Method'] = st.selectbox("Select Payment Method", options=sorted(list(df['Payment Method'].unique())))
+                if 'Payment Method' in df.columns:
+                    input_data['Payment Method'] = st.selectbox(
+                        "Select Payment Method",
+                        options=sorted(list(df['Payment Method'].unique())),
+                        help="Choose the payment method for the booking."
+                    )
 
             if st.button("✨ Predict Booking Status"):
-                # Check for critical inputs
                 if 'Pickup Location' in input_data and not input_data['Pickup Location']:
                     st.warning("Please select a Pickup Location.")
                 elif 'Drop Location' in input_data and not input_data['Drop Location']:
                     st.warning("Please select a Drop Location.")
                 else:
-                    # Create a DataFrame with user inputs and sensible defaults for other features
                     final_input_df = pd.DataFrame(columns=X.columns)
-                    final_input_df.loc[0] = final_input_df.mean() if not final_input_df.empty else 0
+                    final_input_df.loc[0] = 0
                     
-                    # Update with user inputs
                     for key, value in input_data.items():
                         if key in final_input_df.columns:
-                             final_input_df.loc[0, key] = value
+                            final_input_df.loc[0, key] = value
                     
-                    # Ensure all columns are present with default values
                     for col in X.columns:
                         if col not in final_input_df.columns:
                             final_input_df[col] = df[col].mean() if df[col].dtype != 'object' else 'Unknown'
 
-                    # Encode and scale
                     for col in final_input_df.columns:
                         if final_input_df[col].dtype == 'object' and col in label_encoders:
                             try:
@@ -314,10 +313,7 @@ if uploaded_file:
                                 st.stop()
                     
                     input_scaled = scaler.transform(final_input_df)
-                    
-                    # Predict and display the result
                     prediction = model.predict(input_scaled)
                     st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
-
 else:
     st.info("👆 Upload a CSV file to get started.")
