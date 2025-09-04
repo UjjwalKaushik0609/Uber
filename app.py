@@ -204,7 +204,21 @@ if uploaded_file is not None:
             if df[col].dtype == "object":
                 input_data[col] = st.selectbox(f"Select {col}", df[col].unique())
             else:
-                input_data[col] = st.number_input(f"Enter {col}", float(df[col].min()), float(df[col].max()))
+                # Handle numeric safely
+                col_series = pd.to_numeric(df[col], errors="coerce")
+                if col_series.notna().any():
+                    col_min = float(col_series.min(skipna=True))
+                    col_max = float(col_series.max(skipna=True))
+                else:
+                    col_min, col_max = 0.0, 100.0  # fallback range
+
+                default_val = (col_min + col_max) / 2
+                input_data[col] = st.number_input(
+                    f"Enter {col}",
+                    min_value=col_min,
+                    max_value=col_max,
+                    value=default_val
+                )
 
         if st.button("Predict Booking Status"):
             input_df = pd.DataFrame([input_data])
