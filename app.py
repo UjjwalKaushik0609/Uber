@@ -51,17 +51,6 @@ def load_and_clean_data(uploaded_file):
     df.drop_duplicates(inplace=True)
     df.fillna("Unknown", inplace=True)
 
-    # List of all relevant columns for cleaning
-    all_cols = [
-        "Date", "Time", "Driver Ratings", "Customer Rating", "Booking Value",
-        "Ride Distance", "Avg VTAT", "Avg CTAT", "Pickup Location", "Drop Location",
-        "Vehicle Type", "Payment Method", "Booking Status"
-    ]
-    
-    # Check for presence of all key columns
-    if not all(col in df.columns for col in all_cols):
-        st.warning("Your dataset might be missing some key columns. The app will proceed but some features may not work.")
-
     # Convert date and time columns
     if "Date" in df.columns:
         df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -194,7 +183,7 @@ if uploaded_file:
         
         if target_col in df.columns:
             # Drop non-feature columns
-            X = df.drop(columns=[target_col, "Date", "Time"], errors='ignore')
+            X = df.drop(columns=[target_col, "Date", "Time", "Booking ID", "Customer ID"], errors='ignore')
             y = df[target_col]
 
             @st.cache_data
@@ -256,50 +245,79 @@ if uploaded_file:
             st.subheader("Predict a New Booking")
             st.markdown("Enter the details for a new ride to get a prediction.")
 
-            def get_user_input():
-                input_data = {}
-                col1, col2 = st.columns(2)
-                
-                # Dynamic inputs for categorical features
-                categorical_cols = X.select_dtypes(include='object').columns
-                for col in categorical_cols:
-                    if col in label_encoders:
-                        with col1:
-                            input_data[col] = st.selectbox(f"Select {col}", options=[''] + sorted(list(label_encoders[col].classes_)))
-                
-                # Dynamic inputs for numerical features
-                numerical_cols = X.select_dtypes(include=np.number).columns
-                for col in numerical_cols:
-                    with col2:
-                        default_value = X[col].mean() if not X[col].empty and not X[col].isna().all() else 0.0
-                        input_data[col] = st.number_input(f"Enter {col}", value=default_value)
-                
-                return input_data
-
-            user_input_data = get_user_input()
+            # Create a simplified set of user inputs for prediction
+            input_data = {}
+            col1, col2 = st.columns(2)
             
-            if st.button("✨ Predict Booking Status"):
-                # Create a DataFrame from the user input
-                input_df = pd.DataFrame([user_input_data])
-                
-                # Ensure columns are in the correct order for the model
-                input_df = input_df.reindex(columns=X.columns, fill_value=0)
-                
-                # Encode categorical inputs using the trained encoders
-                for col in X.columns:
-                    if X[col].dtype == "object":
-                        try:
-                            input_df[col] = label_encoders[col].transform(input_df[col])
-                        except ValueError as e:
-                            st.error(f"Cannot encode value for column '{col}'. The value '{input_df[col].iloc[0]}' was not in the original training data.")
-                            st.stop()
+            # Simplified Categorical Inputs
+            if 'Pickup Location' in df.columns:
+                with col1:
+                    input_data['Pickup Location'] = st.selectbox("Select Pickup Location", options=[''] + sorted(list(df['Pickup Location'].unique())))
+            if 'Drop Location' in df.columns:
+                with col1:
+                    input_data['Drop Location'] = st.selectbox("Select Drop Location", options=[''] + sorted(list(df['Drop Location'].unique())))
+            if 'Vehicle Type' in df.columns:
+                with col1:
+                    input_data['Vehicle Type'] = st.selectbox("Select Vehicle Type", options=sorted(list(df['Vehicle Type'].unique())))
 
-                # Scale the input data using the trained scaler
-                input_scaled = scaler.transform(input_df)
-                
-                # Predict and display the result
-                prediction = model.predict(input_scaled)
-                st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
+            # Simplified Numerical Inputs
+            if 'Ride Distance' in df.columns:
+                with col2:
+                    input_data['Ride Distance'] = st.number_input(
+                        "Ride Distance (km)",
+                        min_value=0.1,
+                        max_value=100.0,
+                        value=df['Ride Distance'].mean() if not df['Ride Distance'].empty and not df['Ride Distance'].isna().all() else 5.0,
+                        help="Enter the estimated distance of the ride in kilometers."
+                    )
+            if 'Customer Rating' in df.columns:
+                with col2:
+                    input_data['Customer Rating'] = st.slider(
+                        "Customer Rating",
+                        min_value=1.0,
+                        max_value=5.0,
+                        value=df['Customer Rating'].mean() if not df['Customer Rating'].empty and not df['Customer Rating'].isna().all() else 4.5,
+                        help="Enter the customer's average rating (1-5)."
+                    )
+            if 'Payment Method' in df.columns:
+                with col2:
+                    input_data['Payment Method'] = st.selectbox("Select Payment Method", options=sorted(list(df['Payment Method'].unique())))
+
+            if st.button("✨ Predict Booking Status"):
+                # Check for critical inputs
+                if 'Pickup Location' in input_data and not input_data['Pickup Location']:
+                    st.warning("Please select a Pickup Location.")
+                elif 'Drop Location' in input_data and not input_data['Drop Location']:
+                    st.warning("Please select a Drop Location.")
+                else:
+                    # Create a DataFrame with user inputs and sensible defaults for other features
+                    final_input_df = pd.DataFrame(columns=X.columns)
+                    final_input_df.loc[0] = final_input_df.mean() if not final_input_df.empty else 0
+                    
+                    # Update with user inputs
+                    for key, value in input_data.items():
+                        if key in final_input_df.columns:
+                             final_input_df.loc[0, key] = value
+                    
+                    # Ensure all columns are present with default values
+                    for col in X.columns:
+                        if col not in final_input_df.columns:
+                            final_input_df[col] = df[col].mean() if df[col].dtype != 'object' else 'Unknown'
+
+                    # Encode and scale
+                    for col in final_input_df.columns:
+                        if final_input_df[col].dtype == 'object' and col in label_encoders:
+                            try:
+                                final_input_df[col] = label_encoders[col].transform(final_input_df[col])
+                            except ValueError as e:
+                                st.error(f"Cannot encode value for column '{col}': {e}. Please ensure selected value is present in the training data.")
+                                st.stop()
+                    
+                    input_scaled = scaler.transform(final_input_df)
+                    
+                    # Predict and display the result
+                    prediction = model.predict(input_scaled)
+                    st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
 
 else:
     st.info("👆 Upload a CSV file to get started.")
