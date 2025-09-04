@@ -199,49 +199,53 @@ if uploaded_file is not None:
         target_encoder = LabelEncoder()
         y = target_encoder.fit_transform(y)
 
-        # Ensure numeric
-        X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
-
-        if X.shape[0] > 0:  # ✅ safeguard check
-            # Scale numeric
-            scaler = StandardScaler()
-            X = scaler.fit_transform(X)
-
-            # Train-test split
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
-            )
-
-            # Models
-            models = {
-                "Logistic Regression": LogisticRegression(max_iter=500),
-                "Decision Tree": DecisionTreeClassifier(),
-                "Random Forest": RandomForestClassifier(),
-                "Naive Bayes": GaussianNB(),
-                "SVM": SVC(),
-                "KNN": KNeighborsClassifier()
-            }
-
-            model_choice = st.selectbox("Select Model", list(models.keys()))
-            model = models[model_choice]
-
-            # Train & Evaluate
-            model.fit(X_train, y_train)
-            preds = model.predict(X_test)
-            acc = accuracy_score(y_test, preds) * 100
-            st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
-
-            # Feature importance (tree-based models)
-            if model_choice in ["Decision Tree", "Random Forest"]:
-                st.write("### 🔎 Feature Importance")
-                feature_importances = pd.Series(
-                    model.feature_importances_,
-                    index=df.drop(columns=[target_col] + list(datetime_cols), errors="ignore").columns
-                )
-                fig, ax = plt.subplots()
-                feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
-                st.pyplot(fig)
+        # ✅ Check if at least 2 classes exist
+        if len(np.unique(y)) < 2:
+            st.warning("⚠️ Not enough classes in the selected filters for training. Please select more Booking Status options.")
         else:
-            st.warning("⚠️ No rows left after filtering. Please adjust filters to see predictions.")
+            # Ensure numeric
+            X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+
+            if X.shape[0] > 0:  # ✅ safeguard for empty dataset
+                # Scale numeric
+                scaler = StandardScaler()
+                X = scaler.fit_transform(X)
+
+                # Train-test split
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
+
+                # Models
+                models = {
+                    "Logistic Regression": LogisticRegression(max_iter=500),
+                    "Decision Tree": DecisionTreeClassifier(),
+                    "Random Forest": RandomForestClassifier(),
+                    "Naive Bayes": GaussianNB(),
+                    "SVM": SVC(),
+                    "KNN": KNeighborsClassifier()
+                }
+
+                model_choice = st.selectbox("Select Model", list(models.keys()))
+                model = models[model_choice]
+
+                # Train & Evaluate
+                model.fit(X_train, y_train)
+                preds = model.predict(X_test)
+                acc = accuracy_score(y_test, preds) * 100
+                st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
+
+                # Feature importance (tree-based models)
+                if model_choice in ["Decision Tree", "Random Forest"]:
+                    st.write("### 🔎 Feature Importance")
+                    feature_importances = pd.Series(
+                        model.feature_importances_,
+                        index=df.drop(columns=[target_col] + list(datetime_cols), errors="ignore").columns
+                    )
+                    fig, ax = plt.subplots()
+                    feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
+                    st.pyplot(fig)
+            else:
+                st.warning("⚠️ No rows left after filtering. Please adjust filters to see predictions.")
     else:
         st.info("👆 Upload a CSV file to get started.")
