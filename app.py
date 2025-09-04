@@ -2,7 +2,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import seaborn as sns
 import matplotlib.pyplot as plt
 
 from sklearn.model_selection import train_test_split
@@ -96,7 +95,7 @@ if uploaded_file is not None:
         df = df[df["Booking Status"].isin(status_filter)]
 
     # -------------------------------
-    # EDA Visualizations
+    # EDA Visualizations (Matplotlib only)
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
@@ -110,6 +109,7 @@ if uploaded_file is not None:
         fig, ax = plt.subplots(figsize=(10,5))
         ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
         ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
+        ax.set_title("Daily Rides & Revenue")
         ax.legend()
         st.pyplot(fig)
 
@@ -117,15 +117,19 @@ if uploaded_file is not None:
     if "Booking Status" in df.columns:
         st.write("### Booking Status Distribution")
         fig, ax = plt.subplots()
-        sns.countplot(x="Booking Status", data=df, ax=ax, palette="viridis")
+        counts = df["Booking Status"].value_counts()
+        ax.bar(counts.index, counts.values, color="skyblue")
+        ax.set_ylabel("Count")
         st.pyplot(fig)
 
     # 3️⃣ Vehicle Type
     if "Vehicle Type" in df.columns:
         st.write("### Vehicle Type Distribution")
         fig, ax = plt.subplots()
-        sns.countplot(x="Vehicle Type", data=df, order=df['Vehicle Type'].value_counts().index, palette="coolwarm")
+        counts = df["Vehicle Type"].value_counts()
+        ax.bar(counts.index, counts.values, color="orange")
         plt.xticks(rotation=45)
+        ax.set_ylabel("Count")
         st.pyplot(fig)
 
     # 4️⃣ Top Pickup & Drop
@@ -134,10 +138,10 @@ if uploaded_file is not None:
         top_pickups = df["Pickup Location"].value_counts().head(10)
         top_drops = df["Drop Location"].value_counts().head(10)
         fig, axes = plt.subplots(1, 2, figsize=(14,5))
-        sns.barplot(x=top_pickups.values, y=top_pickups.index, ax=axes[0], palette="Blues_r")
-        sns.barplot(x=top_drops.values, y=top_drops.index, ax=axes[1], palette="Greens_r")
-        axes[0].set_title("Pickup Locations")
-        axes[1].set_title("Drop Locations")
+        axes[0].barh(top_pickups.index[::-1], top_pickups.values[::-1], color="blue")
+        axes[0].set_title("Top Pickup Locations")
+        axes[1].barh(top_drops.index[::-1], top_drops.values[::-1], color="green")
+        axes[1].set_title("Top Drop Locations")
         st.pyplot(fig)
 
     # 5️⃣ Ratings
@@ -145,19 +149,25 @@ if uploaded_file is not None:
         st.write("### Ratings Distribution")
         fig, axes = plt.subplots(1, 2, figsize=(12,5))
         if "Driver Ratings" in df.columns:
-            sns.histplot(df["Driver Ratings"], bins=10, kde=True, ax=axes[0], color="blue")
+            axes[0].hist(df["Driver Ratings"].dropna(), bins=10, color="blue", alpha=0.7)
             axes[0].set_title("Driver Ratings")
         if "Customer Rating" in df.columns:
-            sns.histplot(df["Customer Rating"], bins=10, kde=True, ax=axes[1], color="green")
+            axes[1].hist(df["Customer Rating"].dropna(), bins=10, color="green", alpha=0.7)
             axes[1].set_title("Customer Ratings")
         st.pyplot(fig)
 
-    # 6️⃣ Correlation Heatmap
+    # 6️⃣ Correlation Heatmap (matplotlib imshow)
     num_cols = df.select_dtypes(include=[np.number]).columns
     if len(num_cols) > 1:
         st.write("### Correlation Heatmap")
+        corr = df[num_cols].corr()
         fig, ax = plt.subplots(figsize=(8,6))
-        sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+        cax = ax.matshow(corr, cmap="coolwarm")
+        fig.colorbar(cax)
+        ax.set_xticks(range(len(num_cols)))
+        ax.set_yticks(range(len(num_cols)))
+        ax.set_xticklabels(num_cols, rotation=90)
+        ax.set_yticklabels(num_cols)
         st.pyplot(fig)
 
     # -------------------------------
@@ -170,7 +180,6 @@ if uploaded_file is not None:
         X = df.drop(columns=[target_col])
         y = df[target_col]
 
-        # Encode categorical
         for col in X.columns:
             if X[col].dtype == "object":
                 le = LabelEncoder()
@@ -197,15 +206,22 @@ if uploaded_file is not None:
             preds = model.predict(X_test)
             acc = accuracy_score(y_test, preds) * 100
             results[name] = acc
-
             st.success(f"✅ {name} Accuracy: {acc:.2f}%")
 
             if name in ["Decision Tree", "Random Forest"]:
                 st.write(f"### {name} Feature Importance")
                 feature_importances = pd.Series(model.feature_importances_, index=df.drop(columns=[target_col]).columns)
                 fig, ax = plt.subplots()
-                feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
+                feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax, color="purple")
                 st.pyplot(fig)
+
+        # Compare all models in one bar chart
+        st.write("### 📊 Model Accuracy Comparison")
+        fig, ax = plt.subplots()
+        ax.bar(results.keys(), results.values(), color="teal")
+        ax.set_ylabel("Accuracy (%)")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
 
 else:
     st.info("👆 Upload a CSV file to get started.")
