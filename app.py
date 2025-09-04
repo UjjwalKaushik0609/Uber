@@ -10,7 +10,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report, ConfusionMatrixDisplay
 
 # -------------------------------
 # Streamlit Config
@@ -53,13 +53,18 @@ if uploaded_file is not None:
             X, y, test_size=0.2, random_state=42
         )
 
+        # -------------------------------
+        # Models with Class Balancing
+        # -------------------------------
+        class_weights = "balanced"
+
         models = {
-            "Logistic Regression": LogisticRegression(max_iter=500),
-            "Decision Tree": DecisionTreeClassifier(),
-            "Random Forest": RandomForestClassifier(),
-            "Naive Bayes": GaussianNB(),
-            "SVM": SVC(),
-            "KNN": KNeighborsClassifier(),
+            "Logistic Regression": LogisticRegression(max_iter=500, class_weight=class_weights),
+            "Decision Tree": DecisionTreeClassifier(class_weight=class_weights),
+            "Random Forest": RandomForestClassifier(class_weight=class_weights),
+            "Naive Bayes": GaussianNB(),  # NB doesn't support class_weight
+            "SVM": SVC(class_weight=class_weights),
+            "KNN": KNeighborsClassifier(),  # KNN doesn't support class_weight
         }
 
         model_choice = st.selectbox("Select Model", list(models.keys()))
@@ -69,6 +74,17 @@ if uploaded_file is not None:
         preds = model.predict(X_test)
         acc = accuracy_score(y_test, preds) * 100
         st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
+
+        # -------------------------------
+        # Confusion Matrix & Report
+        # -------------------------------
+        st.write("### 📉 Confusion Matrix")
+        fig, ax = plt.subplots()
+        ConfusionMatrixDisplay.from_estimator(model, X_test, y_test, cmap="Blues", ax=ax)
+        st.pyplot(fig)
+
+        st.write("### 📑 Classification Report")
+        st.text(classification_report(y_test, preds))
 
         # -------------------------------
         # User-Friendly Prediction Form
@@ -118,7 +134,7 @@ if uploaded_file is not None:
             )
 
         # -------------------------------
-        # Run Prediction (FIXED VERSION)
+        # Run Prediction (FIXED)
         # -------------------------------
         if st.button("🔮 Predict Booking Status"):
             input_df = pd.DataFrame([input_data])
