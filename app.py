@@ -103,7 +103,9 @@ if uploaded_file is not None:
     # 1️⃣ Daily rides & revenue
     if "Date" in df.columns and "Booking Value" in df.columns:
         st.write("### Daily Rides & Revenue")
+    
         df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
+
         rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
         revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
         daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
@@ -183,10 +185,10 @@ if uploaded_file is not None:
         target_encoder = LabelEncoder()
         y = target_encoder.fit_transform(y)
 
-        # Ensure all features are numeric
-        X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+        # Ensure numeric
+        X = X.apply(pd.to_numeric, errors="coerce").fillna(0).astype(float)
 
-        # Scale numeric features
+        # Scale
         scaler = StandardScaler()
         X = scaler.fit_transform(X)
 
@@ -207,14 +209,12 @@ if uploaded_file is not None:
         model_choice = st.selectbox("Select Model", list(models.keys()))
         model = models[model_choice]
 
-        # Train & evaluate
         model.fit(X_train, y_train)
         preds = model.predict(X_test)
         acc = accuracy_score(y_test, preds) * 100
 
         st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
 
-        # Feature importance for tree-based models
         if model_choice in ["Decision Tree", "Random Forest"]:
             st.write("### 🔎 Feature Importance")
             feature_importances = pd.Series(
@@ -227,3 +227,4 @@ if uploaded_file is not None:
 
 else:
     st.info("👆 Upload a CSV file to get started.")
+
