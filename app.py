@@ -100,19 +100,22 @@ if uploaded_file is not None:
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
-    # 1️⃣ Daily rides & revenue (FIXED)
+    # 1️⃣ Daily rides & revenue (FIXED for non-numeric values)
     if "Date" in df.columns and "Booking Value" in df.columns:
-        st.write("### Daily Rides & Revenue")
-        
-        rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
-        revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
-        daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
+       st.write("### Daily Rides & Revenue")
+    
+       # Ensure Booking Value is numeric
+       df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
 
-        fig, ax = plt.subplots(figsize=(10,5))
-        ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
-        ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
-        ax.legend()
-        st.pyplot(fig)
+       rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
+       revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
+       daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
+
+       fig, ax = plt.subplots(figsize=(10,5))
+       ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
+       ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
+       ax.legend()
+       st.pyplot(fig)
 
     # 2️⃣ Booking Status
     if "Booking Status" in df.columns:
