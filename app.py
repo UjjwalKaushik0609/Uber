@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -109,7 +108,6 @@ if uploaded_file is not None:
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
-    # 1️⃣ Daily rides & revenue
     if "Date" in df.columns and "Booking Value" in df.columns:
         st.write("### Daily Rides & Revenue")
         df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
@@ -122,14 +120,12 @@ if uploaded_file is not None:
         ax.legend()
         st.pyplot(fig)
 
-    # 2️⃣ Booking Status
     if "Booking Status" in df.columns:
         st.write("### Booking Status Distribution")
         fig, ax = plt.subplots()
         sns.countplot(x="Booking Status", data=df, ax=ax, palette="viridis")
         st.pyplot(fig)
 
-    # 3️⃣ Vehicle Type
     if "Vehicle Type" in df.columns:
         st.write("### Vehicle Type Distribution")
         fig, ax = plt.subplots()
@@ -142,7 +138,6 @@ if uploaded_file is not None:
         plt.xticks(rotation=45)
         st.pyplot(fig)
 
-    # 4️⃣ Top Pickup & Drop
     if "Pickup Location" in df.columns and "Drop Location" in df.columns:
         st.write("### Top 10 Pickup & Drop Locations")
         top_pickups = df["Pickup Location"].value_counts().head(10)
@@ -154,19 +149,6 @@ if uploaded_file is not None:
         axes[1].set_title("Drop Locations")
         st.pyplot(fig)
 
-    # 5️⃣ Ratings
-    if "Driver Ratings" in df.columns or "Customer Rating" in df.columns:
-        st.write("### Ratings Distribution")
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        if "Driver Ratings" in df.columns:
-            sns.histplot(df["Driver Ratings"], bins=10, kde=True, ax=axes[0], color="blue")
-            axes[0].set_title("Driver Ratings")
-        if "Customer Rating" in df.columns:
-            sns.histplot(df["Customer Rating"], bins=10, kde=True, ax=axes[1], color="green")
-            axes[1].set_title("Customer Ratings")
-        st.pyplot(fig)
-
-    # 6️⃣ Correlation Heatmap
     num_cols = df.select_dtypes(include=[np.number]).columns
     if len(num_cols) > 1:
         st.write("### Correlation Heatmap")
@@ -175,19 +157,17 @@ if uploaded_file is not None:
         st.pyplot(fig)
 
     # -------------------------------
-    # ML Prediction Section
+    # ML Prediction Section (Updated)
     # -------------------------------
     st.subheader("🤖 Predict Booking Status")
     target_col = "Booking Status"
 
     if target_col in df.columns:
-        # Prepare features
         X = df.drop(columns=[target_col])
         datetime_cols = X.select_dtypes(include=["datetime64[ns]"]).columns
         X = X.drop(columns=datetime_cols, errors="ignore")
         y = df[target_col]
 
-        # Encode categorical features
         label_encoders = {}
         for col in X.columns:
             if X[col].dtype == "object":
@@ -195,28 +175,22 @@ if uploaded_file is not None:
                 X[col] = le.fit_transform(X[col].astype(str))
                 label_encoders[col] = le
 
-        # Encode target
         target_encoder = LabelEncoder()
         y = target_encoder.fit_transform(y)
 
-        # ✅ Check if at least 2 classes exist
         if len(np.unique(y)) < 2:
             st.warning("⚠️ Not enough classes in the selected filters for training. Please select more Booking Status options.")
         else:
-            # Ensure numeric
             X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-            if X.shape[0] > 0:  # ✅ safeguard for empty dataset
-                # Scale numeric
+            if X.shape[0] > 0:
                 scaler = StandardScaler()
-                X = scaler.fit_transform(X)
+                X_scaled = scaler.fit_transform(X)
 
-                # Train-test split
                 X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, random_state=42
+                    X_scaled, y, test_size=0.2, random_state=42
                 )
 
-                # Models
                 models = {
                     "Logistic Regression": LogisticRegression(max_iter=500),
                     "Decision Tree": DecisionTreeClassifier(),
@@ -229,13 +203,11 @@ if uploaded_file is not None:
                 model_choice = st.selectbox("Select Model", list(models.keys()))
                 model = models[model_choice]
 
-                # Train & Evaluate
                 model.fit(X_train, y_train)
                 preds = model.predict(X_test)
                 acc = accuracy_score(y_test, preds) * 100
                 st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
 
-                # Feature importance (tree-based models)
                 if model_choice in ["Decision Tree", "Random Forest"]:
                     st.write("### 🔎 Feature Importance")
                     feature_importances = pd.Series(
@@ -245,6 +217,33 @@ if uploaded_file is not None:
                     fig, ax = plt.subplots()
                     feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
                     st.pyplot(fig)
+
+                st.write("### 🎯 Make a Prediction")
+                with st.form("prediction_form"):
+                    booking_value = st.number_input("Booking Value", min_value=0.0, step=1.0)
+                    if "Vehicle Type" in df.columns:
+                        vehicle_type = st.selectbox("Vehicle Type", df["Vehicle Type"].unique())
+                    else:
+                        vehicle_type = "Unknown"
+                    hour = st.slider("Hour of Day", 0, 23, 12)
+                    submit = st.form_submit_button("Predict")
+
+                if submit:
+                    input_df = pd.DataFrame({
+                        "Booking Value": [booking_value],
+                        "Vehicle Type": [vehicle_type],
+                        "Hour": [hour]
+                    })
+
+                    for col, le in label_encoders.items():
+                        if col in input_df.columns:
+                            input_df[col] = le.transform(input_df[col].astype(str))
+
+                    input_scaled = scaler.transform(input_df)
+                    pred = model.predict(input_scaled)
+                    pred_label = target_encoder.inverse_transform(pred)
+                    st.success(f"🎯 Predicted Booking Status: **{pred_label[0]}**")
+
             else:
                 st.warning("⚠️ No rows left after filtering. Please adjust filters to see predictions.")
     else:
