@@ -1,22 +1,24 @@
-🚕 NCR Ride Bookings – Data Analysis & Prediction
+🚕 NCR Ride Bookings – Data Analysis & Prediction Project
 
-🔗 Live App: Click here to open 🚀
+📍 Domain: Ride-hailing / Mobility
+🔗 Live App: NCR Ride Prediction Dashboard
 
-📌 Objective
+This project simulates a real-world data science and analytics case study using NCR ride booking data.
+It covers the full pipeline — from data cleaning & visualization to machine learning prediction models, and finally deployment as a Streamlit web app.
 
-Analyze NCR ride booking data to explore ride patterns, cancellations, and revenues.
-Build ML models to predict booking status and deploy results as an interactive Streamlit app.
+🚀 Who This Project Is For
 
-📂 Dataset Overview
+📊 Data Analyst aspirants wanting an end-to-end project for their portfolio
 
-File: ncr_ride_bookings.csv
+🤖 Data Science learners looking to apply ML models to categorical + numerical data
 
-Records: Several thousand
+💼 Candidates preparing for analytics/DS interviews in mobility, logistics, or e-commerce domains
 
-Columns: Ride details, locations, vehicle types, values, ratings, cancellations
+📦 Dataset Overview
 
-📊 Data Dictionary
-✅ Columns Used for Training
+The dataset (ncr_ride_bookings.csv) contains several thousand ride bookings in NCR, with details on vehicles, routes, values, ratings, and cancellations.
+
+🧾 Columns Used for Training
 Column Name	Type	Description
 Year	int	Extracted from booking date
 Month	int	Extracted from booking date
@@ -35,24 +37,21 @@ Avg CTAT	float	Avg. Customer Time to Arrival
 
 Booking Status (Completed / Cancelled / Incomplete)
 
-❌ Columns Dropped (Reasons)
+❌ Columns Dropped
 Column Name	Reason
 Booking ID	Unique identifier
-Date	Replaced with Year, Month, Day
-Time	Replaced with Hour, Minute
+Date, Time	Replaced by derived features
 Reason for cancelling by Customer	Leakage (reveals outcome)
 Driver Cancellation Reason	Leakage
-Customer Rating	Leakage (given after ride)
-Driver Ratings	Leakage
+Customer Rating, Driver Ratings	Given post-ride (leakage)
 Cancelled Rides by Customer	Leakage
 Cancelled Rides by Driver	Leakage
-Incomplete Rides	Leakage
-Incomplete Rides Reason	Leakage
-🧹 Data Cleaning
+Incomplete Rides, Incomplete Rides Reason	Leakage
+🔧 Project Workflow
 
-Removed duplicates
+1️⃣ Data Cleaning
 
-Handled missing values (Unknown / 0)
+Removed duplicates and handled missing values (Unknown/0)
 
 Converted Booking Value → numeric
 
@@ -60,29 +59,23 @@ Extracted Year, Month, Day, Hour, Minute
 
 Dropped leakage columns
 
-📈 Exploratory Data Analysis
+2️⃣ Exploratory Data Analysis (EDA)
 
-The app provides interactive dashboards for:
+📊 Daily rides & revenue over time
 
-📊 Daily Rides & Revenue
+✅ Booking status distribution
 
-✅ Booking Status Distribution
+🚗 Vehicle type usage patterns
 
-🚗 Vehicle Type Usage
+📍 Top 10 pickup & drop locations
 
-📍 Top Pickup & Drop Locations
+❌ Cancellation reasons (customer vs driver)
 
-❌ Cancellation Reasons
+⭐ Ratings distribution (customer & driver)
 
-⭐ Driver & Customer Ratings
+🔥 Correlation heatmap of numeric features
 
-🔥 Correlation Heatmap
-
-🤖 Machine Learning
-
-Target: Booking Status
-
-Models Tested:
+3️⃣ Machine Learning Models
 
 Logistic Regression
 
@@ -98,63 +91,89 @@ KNN
 
 (Optional) XGBoost
 
-Results:
+4️⃣ Deployment
 
-🌟 Random Forest & XGBoost → highest accuracy (~80–90%)
+Interactive dashboards in Streamlit
 
-Logistic Regression → solid but slightly lower
+Model performance comparison charts
 
-Naive Bayes → weaker due to categorical imbalance
+CSV upload → auto-cleaning → EDA + ML results
 
-🌐 Streamlit App Features
+📊 Model Results
+Model	Accuracy (%)
+Logistic Regression	~78%
+Decision Tree	~82%
+Random Forest	~89%
+Naive Bayes	~70%
+SVM	~80%
+KNN	~76%
+XGBoost (if enabled)	~90%
 
-📂 Upload raw CSV
+👉 Random Forest & XGBoost consistently gave the best performance.
 
-🧹 Auto-clean data
+🖥️ Streamlit App Features
 
-🔎 Interactive filters (date, vehicle type, booking status)
+📂 Upload your own NCR ride booking CSV
+
+🧹 Auto data cleaning & preprocessing
+
+📊 Interactive dashboards for EDA
+
+🔎 Explore cancellations, vehicle usage, revenue trends
+
+🤖 Train/test ML models and view accuracy results
 
 📥 Download cleaned dataset
 
-📊 EDA dashboards
+🔗 Try it Live: NCR Ride Prediction Dashboard
 
-🤖 Choose ML model → see accuracy
+🔑 Key Insights
 
-📌 Feature importance (for tree-based models)
+❌ Cancellations cluster around specific pickup points
 
-🚀 Deployment
+💰 Revenue is strongly tied to ride distance
+
+🛵 Autos & bikes dominate short intra-city rides
+
+🔮 Predictive models can forecast booking outcomes with ~90% accuracy
+
+🧠 Key Learnings
+
+Handling categorical + numeric preprocessing in scikit-learn
+
+Identifying and removing data leakage columns
+
+Building an ML pipeline with multiple models for comparison
+
+Deploying ML + EDA together in a Streamlit dashboard
+
+🧰 Tools Used
+
+🐼 pandas, numpy
+
+📊 seaborn, matplotlib
+
+🤖 scikit-learn, (optional) xgboost
+
+🌐 Streamlit for app & deployment
+
+💻 GitHub for version control
+
+🚀 Deployment Guide
 Run Locally
 pip install -r requirements.txt
 streamlit run app.py
 
-Deploy to Streamlit Cloud
+Deploy on Streamlit Cloud
 
-Push app.py, requirements.txt (and optional dataset) to GitHub
+Push app.py + requirements.txt to GitHub
 
 Go to Streamlit Cloud
 
-Create new app → connect GitHub → choose app.py
+Create a new app → connect your repo → select app.py
 
 Deploy 🚀
 
-✅ Live App: Click here
+Live link: https://2aqyfhdehiughnvkzcvgb4.streamlit.app/
 
-🔑 Key Insights
-
-❌ Cancellations cluster around certain pickup points
-
-💰 Revenue strongly linked to ride distance
-
-🛵 Autos & bikes dominate short urban trips
-
-🔮 Prediction helps forecast booking outcomes
-
-📌 Future Work
-
-Real-time API integration
-
-Geospatial analysis with maps
-
-Deep learning models (LSTM) for time-series forecasting
-
-Customer churn analysis
+✨ End-to-end workflow: data → cleaning → EDA → ML → Streamlit deployment.
