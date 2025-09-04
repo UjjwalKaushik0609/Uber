@@ -158,23 +158,26 @@ if uploaded_file:
                         X_encoded[col] = le.fit_transform(X_encoded[col].astype(str))
                         le_dict[col] = le
                 
+                # FIX: Explicitly encode the target variable and store its encoder
+                le_target = LabelEncoder()
+                y_encoded = le_target.fit_transform(target_y.astype(str))
+                le_dict[target_y.name] = le_target
+                
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(X_encoded)
                 
-                # Check for imbalance and calculate scale_pos_weight
-                unique_classes, counts = np.unique(target_y, return_counts=True)
+                unique_classes, counts = np.unique(y_encoded, return_counts=True)
+                scale_pos_weight = 1
                 if len(counts) == 2:
-                    pos_class_name = unique_classes[1] if counts[1] < counts[0] else unique_classes[0]
-                    neg_class_name = unique_classes[0] if counts[1] < counts[0] else unique_classes[1]
-                    scale_pos_weight = counts[np.where(unique_classes == neg_class_name)[0][0]] / counts[np.where(unique_classes == pos_class_name)[0][0]]
-                else:
-                    scale_pos_weight = 1
+                    pos_class_index = np.argmin(counts)
+                    neg_class_index = np.argmax(counts)
+                    scale_pos_weight = counts[neg_class_index] / counts[pos_class_index]
                 
-                return X_scaled, le_dict, scaler, scale_pos_weight
+                return X_scaled, le_dict, scaler, scale_pos_weight, y_encoded
 
-            X_scaled, label_encoders, scaler, scale_pos_weight = preprocess_for_ml(X, y)
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_scaled, y, test_size=0.2, random_state=42
+            X_scaled, label_encoders, scaler, scale_pos_weight, y_encoded = preprocess_for_ml(X, y)
+            X_train, X_test, y_train_encoded, y_test_encoded = train_test_split(
+                X_scaled, y_encoded, test_size=0.2, random_state=42
             )
 
             models = {
@@ -186,16 +189,19 @@ if uploaded_file:
             model_choice = st.selectbox("Choose a model to train:", list(models.keys()))
             model = models[model_choice]
 
-            model.fit(X_train, label_encoders[target_col].transform(y_train))
+            model.fit(X_train, y_train_encoded)
             preds_encoded = model.predict(X_test)
+            
             preds = label_encoders[target_col].inverse_transform(preds_encoded)
-            acc = accuracy_score(y_test, preds) * 100
+            y_test_original = label_encoders[target_col].inverse_transform(y_test_encoded)
+            
+            acc = accuracy_score(y_test_original, preds) * 100
 
             st.markdown(f"**Selected Model:** `{model_choice}`")
             st.success(f"**Accuracy:** `{acc:.2f}%`")
 
             st.subheader("Detailed Performance Metrics")
-            report = classification_report(y_test, preds, output_dict=True)
+            report = classification_report(y_test_original, preds, output_dict=True)
             report_df = pd.DataFrame(report).transpose()
             st.dataframe(report_df.style.background_gradient(cmap='YlOrRd'))
             
@@ -278,6 +284,7 @@ if uploaded_file:
                     
                     input_scaled = scaler.transform(final_input_df)
                     prediction_encoded = model.predict(input_scaled)
+                    
                     prediction = label_encoders[target_col].inverse_transform(prediction_encoded)
                     
                     st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
