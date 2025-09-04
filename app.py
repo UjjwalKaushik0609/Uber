@@ -35,7 +35,7 @@ if uploaded_file is not None:
     # Data Cleaning
     # -------------------------------
     st.subheader("🧹 Data Cleaning")
-    
+
     df.drop_duplicates(inplace=True)
     df.fillna("Unknown", inplace=True)
 
@@ -100,22 +100,19 @@ if uploaded_file is not None:
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
-    # 1️⃣ Daily rides & revenue (FIXED for non-numeric values)
+    # 1️⃣ Daily rides & revenue
     if "Date" in df.columns and "Booking Value" in df.columns:
-       st.write("### Daily Rides & Revenue")
-    
-       # Ensure Booking Value is numeric
-       df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
+        st.write("### Daily Rides & Revenue")
+        df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
+        rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
+        revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
+        daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
 
-       rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
-       revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
-       daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
-
-       fig, ax = plt.subplots(figsize=(10,5))
-       ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
-       ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
-       ax.legend()
-       st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(10,5))
+        ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
+        ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
+        ax.legend()
+        st.pyplot(fig)
 
     # 2️⃣ Booking Status
     if "Booking Status" in df.columns:
@@ -144,19 +141,7 @@ if uploaded_file is not None:
         axes[1].set_title("Drop Locations")
         st.pyplot(fig)
 
-    # 5️⃣ Ratings
-    if "Driver Ratings" in df.columns or "Customer Rating" in df.columns:
-        st.write("### Ratings Distribution")
-        fig, axes = plt.subplots(1, 2, figsize=(12,5))
-        if "Driver Ratings" in df.columns:
-            sns.histplot(df["Driver Ratings"], bins=10, kde=True, ax=axes[0], color="blue")
-            axes[0].set_title("Driver Ratings")
-        if "Customer Rating" in df.columns:
-            sns.histplot(df["Customer Rating"], bins=10, kde=True, ax=axes[1], color="green")
-            axes[1].set_title("Customer Ratings")
-        st.pyplot(fig)
-
-    # 6️⃣ Correlation Heatmap
+    # 5️⃣ Correlation Heatmap
     num_cols = df.select_dtypes(include=[np.number]).columns
     if len(num_cols) > 1:
         st.write("### Correlation Heatmap")
@@ -203,13 +188,42 @@ if uploaded_file is not None:
 
         model_choice = st.selectbox("Select Model", list(models.keys()))
         model = models[model_choice]
-
         model.fit(X_train, y_train)
+
         preds = model.predict(X_test)
         acc = accuracy_score(y_test, preds) * 100
-
         st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
 
+        # -------------------------------
+        # 🔮 Single Prediction Form
+        # -------------------------------
+        st.write("### Try a Prediction")
+
+        input_data = {}
+        for col in df.drop(columns=[target_col]).columns:
+            if df[col].dtype == "object":
+                input_data[col] = st.selectbox(f"Select {col}", df[col].unique())
+            else:
+                input_data[col] = st.number_input(f"Enter {col}", float(df[col].min()), float(df[col].max()))
+
+        if st.button("Predict Booking Status"):
+            input_df = pd.DataFrame([input_data])
+
+            # Apply encoders
+            for col in input_df.columns:
+                if col in label_encoders:
+                    input_df[col] = label_encoders[col].transform(input_df[col].astype(str))
+
+            # Scale
+            input_scaled = scaler.transform(input_df)
+
+            # Prediction
+            prediction = model.predict(input_scaled)[0]
+            st.success(f"🚖 Predicted Booking Status: **{prediction}**")
+
+        # -------------------------------
+        # Feature Importance
+        # -------------------------------
         if model_choice in ["Decision Tree", "Random Forest"]:
             st.write("### Feature Importance")
             feature_importances = pd.Series(model.feature_importances_, index=df.drop(columns=[target_col]).columns)
