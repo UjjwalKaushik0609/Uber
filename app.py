@@ -12,7 +12,7 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # --- Streamlit Configuration ---
 st.set_page_config(
@@ -39,7 +39,7 @@ def load_and_clean_data(uploaded_file):
         uploaded_file: A file-like object uploaded via Streamlit.
 
     Returns:
-        A cleaned Pandas DataFrame.
+        A cleaned Pandas DataFrame, or None if an error occurs.
     """
     try:
         df = pd.read_csv(uploaded_file)
@@ -47,9 +47,20 @@ def load_and_clean_data(uploaded_file):
         st.error(f"Error loading the file: {e}")
         return None
 
-    # Drop duplicates and fill missing values
+    # Drop duplicates and fill missing values with "Unknown"
     df.drop_duplicates(inplace=True)
     df.fillna("Unknown", inplace=True)
+
+    # List of all relevant columns for cleaning
+    all_cols = [
+        "Date", "Time", "Driver Ratings", "Customer Rating", "Booking Value",
+        "Ride Distance", "Avg VTAT", "Avg CTAT", "Pickup Location", "Drop Location",
+        "Vehicle Type", "Payment Method", "Booking Status"
+    ]
+    
+    # Check for presence of all key columns
+    if not all(col in df.columns for col in all_cols):
+        st.warning("Your dataset might be missing some key columns. The app will proceed but some features may not work.")
 
     # Convert date and time columns
     if "Date" in df.columns:
@@ -59,26 +70,25 @@ def load_and_clean_data(uploaded_file):
 
     # Drop potential data leakage columns
     leakage_cols = [
-        "Reason for cancelling by Customer",
-        "Driver Cancellation Reason",
-        "Cancelled Rides by Customer",
-        "Cancelled Rides by Driver",
-        "Incomplete Rides",
-        "Incomplete Rides Reason",
+        "Reason for cancelling by Customer", "Driver Cancellation Reason",
+        "Cancelled Rides by Customer", "Cancelled Rides by Driver",
+        "Incomplete Rides", "Incomplete Rides Reason"
     ]
-    df.drop(
-        columns=[col for col in leakage_cols if col in df.columns],
-        inplace=True,
-        errors="ignore",
-    )
+    df.drop(columns=[col for col in leakage_cols if col in df.columns],
+            inplace=True, errors="ignore")
 
-    # Convert ratings and booking value to numeric, handling errors
-    for col in ["Driver Ratings", "Customer Rating", "Booking Value"]:
+    # Convert all numerical columns to numeric type
+    numeric_cols = ["Driver Ratings", "Customer Rating", "Booking Value", "Ride Distance", "Avg VTAT", "Avg CTAT"]
+    for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
-            df[col].fillna(df[col].mean(), inplace=True)  # Fill NaNs with the mean
-
-    st.success("✅ Data cleaned successfully!")
+            # Fill NaNs with the mean if not empty, otherwise a default value
+            if not df[col].empty and not df[col].isna().all():
+                df[col].fillna(df[col].mean(), inplace=True)
+            else:
+                df[col].fillna(0.0, inplace=True)
+    
+    st.success("✅ Data cleaned and preprocessed successfully!")
     return df
 
 # --- Main application logic ---
@@ -87,14 +97,11 @@ if uploaded_file:
     df = load_and_clean_data(uploaded_file)
     
     if df is not None:
-        st.sidebar.success("✅ Data loaded and cleaned!")
-
         # --- Section 1: Data Overview ---
         st.header("1. Data Overview")
         st.info("A preview of the raw data after initial cleaning.")
         st.dataframe(df.head())
 
-        # Download cleaned data
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Download Cleaned CSV",
@@ -109,7 +116,6 @@ if uploaded_file:
         # Daily rides and revenue
         if "Date" in df.columns and "Booking Value" in df.columns:
             st.subheader("Daily Rides & Revenue Over Time")
-            
             daily_stats = (
                 df.groupby(df["Date"].dt.date)
                 .agg(Total_Rides=("Date", "size"), Total_Revenue=("Booking Value", "sum"))
@@ -118,10 +124,9 @@ if uploaded_file:
             st.line_chart(daily_stats.set_index("Date"))
         
         st.markdown("---")
-
+        
         col1, col2 = st.columns(2)
 
-        # Booking Status Distribution
         if "Booking Status" in df.columns:
             with col1:
                 st.subheader("Booking Status Distribution")
@@ -130,7 +135,6 @@ if uploaded_file:
                 ax.set_title("Booking Status")
                 st.pyplot(fig)
 
-        # Vehicle Type Distribution
         if "Vehicle Type" in df.columns:
             with col2:
                 st.subheader("Vehicle Type Popularity")
@@ -141,7 +145,6 @@ if uploaded_file:
         
         st.markdown("---")
         
-        # Top Pickup & Drop
         if "Pickup Location" in df.columns and "Drop Location" in df.columns:
             st.subheader("Top Locations")
             top_pickups = df["Pickup Location"].value_counts().head(10)
@@ -159,12 +162,9 @@ if uploaded_file:
         
         st.markdown("---")
         
-        # Ratings Distribution
         st.subheader("Ratings Distribution")
-        
         fig, axes = plt.subplots(1, 2, figsize=(12, 5))
         
-        # Plot Driver Ratings
         if "Driver Ratings" in df.columns:
             ratings_numeric = df["Driver Ratings"].dropna()
             if not ratings_numeric.empty:
@@ -174,7 +174,6 @@ if uploaded_file:
                 axes[0].set_title("Driver Ratings (No Data)")
                 axes[0].text(0.5, 0.5, 'No numeric data to display', ha='center', va='center')
 
-        # Plot Customer Ratings
         if "Customer Rating" in df.columns:
             ratings_numeric = df["Customer Rating"].dropna()
             if not ratings_numeric.empty:
@@ -194,24 +193,21 @@ if uploaded_file:
         target_col = "Booking Status"
         
         if target_col in df.columns:
-            # Pre-process data for ML
+            # Drop non-feature columns
             X = df.drop(columns=[target_col, "Date", "Time"], errors='ignore')
             y = df[target_col]
 
-            # Use st.cache_data to speed up preprocessing
             @st.cache_data
             def preprocess_for_ml(data, target_y):
                 le_dict = {}
                 X_encoded = data.copy()
                 
-                # Encode categorical columns
                 for col in X_encoded.columns:
                     if X_encoded[col].dtype == "object":
                         le = LabelEncoder()
                         X_encoded[col] = le.fit_transform(X_encoded[col].astype(str))
                         le_dict[col] = le
                 
-                # Scale numeric columns
                 scaler = StandardScaler()
                 X_scaled = scaler.fit_transform(X_encoded)
                 return X_scaled, le_dict, scaler
@@ -230,7 +226,6 @@ if uploaded_file:
                 "Naive Bayes": GaussianNB(),
             }
 
-            # Model selection and training
             st.subheader("Model Performance")
             model_choice = st.selectbox("Choose a model to train:", list(models.keys()))
             model = models[model_choice]
@@ -242,7 +237,6 @@ if uploaded_file:
             st.markdown(f"**Selected Model:** `{model_choice}`")
             st.success(f"**Accuracy:** `{acc:.2f}%`")
             
-            # Display feature importance for tree-based models
             if model_choice in ["Decision Tree", "Random Forest"]:
                 st.markdown("---")
                 st.subheader("Feature Importance")
@@ -258,60 +252,54 @@ if uploaded_file:
             
             st.markdown("---")
 
-            # --- Predict a New Booking Section ---
+            # --- Predict a New Booking Section with a simplified UI ---
             st.subheader("Predict a New Booking")
             st.markdown("Enter the details for a new ride to get a prediction.")
 
-            # Create a simplified set of user inputs for prediction
-            input_data = {}
-            col1, col2 = st.columns(2)
+            def get_user_input():
+                input_data = {}
+                col1, col2 = st.columns(2)
+                
+                # Dynamic inputs for categorical features
+                categorical_cols = X.select_dtypes(include='object').columns
+                for col in categorical_cols:
+                    if col in label_encoders:
+                        with col1:
+                            input_data[col] = st.selectbox(f"Select {col}", options=[''] + sorted(list(label_encoders[col].classes_)))
+                
+                # Dynamic inputs for numerical features
+                numerical_cols = X.select_dtypes(include=np.number).columns
+                for col in numerical_cols:
+                    with col2:
+                        default_value = X[col].mean() if not X[col].empty and not X[col].isna().all() else 0.0
+                        input_data[col] = st.number_input(f"Enter {col}", value=default_value)
+                
+                return input_data
 
-            with col1:
-                if 'Pickup Location' in df.columns:
-                    input_data['Pickup Location'] = st.selectbox("Select Pickup Location", options=[''] + sorted(list(df['Pickup Location'].unique())))
-                if 'Drop Location' in df.columns:
-                    input_data['Drop Location'] = st.selectbox("Select Drop Location", options=[''] + sorted(list(df['Drop Location'].unique())))
-                if 'Vehicle Type' in df.columns:
-                    input_data['Vehicle Type'] = st.selectbox("Select Vehicle Type", options=sorted(list(df['Vehicle Type'].unique())))
-
-            with col2:
-                if 'Ride Distance' in df.columns:
-                    input_data['Ride Distance'] = st.number_input("Ride Distance (km)", value=df['Ride Distance'].mean() if not df['Ride Distance'].empty else 5.0)
-                if 'Customer Rating' in df.columns:
-                    input_data['Customer Rating'] = st.slider("Customer Rating", 1.0, 5.0, value=df['Customer Rating'].mean() if not df['Customer Rating'].empty else 4.5)
-                if 'Payment Method' in df.columns:
-                    input_data['Payment Method'] = st.selectbox("Select Payment Method", options=sorted(list(df['Payment Method'].unique())))
-
+            user_input_data = get_user_input()
+            
             if st.button("✨ Predict Booking Status"):
-                # Check for critical inputs
-                if 'Pickup Location' in input_data and not input_data['Pickup Location']:
-                    st.warning("Please select a Pickup Location.")
-                elif 'Drop Location' in input_data and not input_data['Drop Location']:
-                    st.warning("Please select a Drop Location.")
-                else:
-                    # Create a DataFrame from the user input and default values for other features
-                    final_input = {col: 'Unknown' if X[col].dtype == 'object' else X[col].mean() for col in X.columns}
-                    final_input.update(input_data)
-                    input_df = pd.DataFrame([final_input])
+                # Create a DataFrame from the user input
+                input_df = pd.DataFrame([user_input_data])
+                
+                # Ensure columns are in the correct order for the model
+                input_df = input_df.reindex(columns=X.columns, fill_value=0)
+                
+                # Encode categorical inputs using the trained encoders
+                for col in X.columns:
+                    if X[col].dtype == "object":
+                        try:
+                            input_df[col] = label_encoders[col].transform(input_df[col])
+                        except ValueError as e:
+                            st.error(f"Cannot encode value for column '{col}'. The value '{input_df[col].iloc[0]}' was not in the original training data.")
+                            st.stop()
 
-                    # Ensure columns are in the correct order for the model
-                    input_df = input_df.reindex(columns=X.columns, fill_value=0)
-                    
-                    # Encode categorical inputs
-                    for col in input_df.columns:
-                        if col in label_encoders:
-                            try:
-                                input_df[col] = label_encoders[col].transform(input_df[col])
-                            except ValueError as e:
-                                st.error(f"Cannot encode value for column '{col}': {e}. Please ensure selected value is present in the training data.")
-                                st.stop()
-                    
-                    # Scale the input data
-                    input_scaled = scaler.transform(input_df)
-                    
-                    # Predict and display the result
-                    prediction = model.predict(input_scaled)
-                    st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
+                # Scale the input data using the trained scaler
+                input_scaled = scaler.transform(input_df)
+                
+                # Predict and display the result
+                prediction = model.predict(input_scaled)
+                st.success(f"**Predicted Booking Status:** `{prediction[0]}` 🎉")
 
 else:
     st.info("👆 Upload a CSV file to get started.")
