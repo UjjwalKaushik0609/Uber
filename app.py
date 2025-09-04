@@ -100,22 +100,19 @@ if uploaded_file is not None:
     # -------------------------------
     st.subheader("📈 Exploratory Data Analysis")
 
-    # 1️⃣ Daily rides & revenue (FIXED for non-numeric values)
+    # 1️⃣ Daily rides & revenue
     if "Date" in df.columns and "Booking Value" in df.columns:
-       st.write("### Daily Rides & Revenue")
-    
-       # Ensure Booking Value is numeric
-       df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
+        st.write("### Daily Rides & Revenue")
+        df["Booking Value"] = pd.to_numeric(df["Booking Value"], errors="coerce").fillna(0)
+        rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
+        revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
+        daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
 
-       rides_per_day = df.groupby("Date").size().reset_index(name="Total Rides")
-       revenue_per_day = df.groupby("Date")["Booking Value"].sum().reset_index(name="Total Revenue")
-       daily_stats = pd.merge(rides_per_day, revenue_per_day, on="Date")
-
-       fig, ax = plt.subplots(figsize=(10,5))
-       ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
-       ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
-       ax.legend()
-       st.pyplot(fig)
+        fig, ax = plt.subplots(figsize=(10,5))
+        ax.plot(daily_stats["Date"], daily_stats["Total Rides"], label="Total Rides", color="blue")
+        ax.plot(daily_stats["Date"], daily_stats["Total Revenue"], label="Total Revenue", color="green")
+        ax.legend()
+        st.pyplot(fig)
 
     # 2️⃣ Booking Status
     if "Booking Status" in df.columns:
@@ -163,72 +160,70 @@ if uploaded_file is not None:
         fig, ax = plt.subplots(figsize=(8,6))
         sns.heatmap(df[num_cols].corr(), annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
         st.pyplot(fig)
+
     # -------------------------------
-# ML Prediction Section
-# -------------------------------
-st.subheader("🤖 Predict Booking Status")
+    # ML Prediction Section
+    # -------------------------------
+    st.subheader("🤖 Predict Booking Status")
 
-target_col = "Booking Status"
-if target_col in df.columns:
-    X = df.drop(columns=[target_col])
-    y = df[target_col]
+    target_col = "Booking Status"
+    if target_col in df.columns:
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
 
-    # Encode categorical features
-    label_encoders = {}
-    for col in X.columns:
-        if X[col].dtype == "object":
-            le = LabelEncoder()
-            X[col] = le.fit_transform(X[col].astype(str))
-            label_encoders[col] = le
+        # Encode categorical features
+        label_encoders = {}
+        for col in X.columns:
+            if X[col].dtype == "object":
+                le = LabelEncoder()
+                X[col] = le.fit_transform(X[col].astype(str))
+                label_encoders[col] = le
 
-    # 🔑 Encode target labels as numbers
-    target_encoder = LabelEncoder()
-    y = target_encoder.fit_transform(y)
+        # Encode target labels
+        target_encoder = LabelEncoder()
+        y = target_encoder.fit_transform(y)
 
-    # Ensure all features are numeric
-    X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+        # Ensure all features are numeric
+        X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
-    # Scale numeric features
-    scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+        # Scale numeric features
+        scaler = StandardScaler()
+        X = scaler.fit_transform(X)
 
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
-
-    models = {
-        "Logistic Regression": LogisticRegression(max_iter=500),
-        "Decision Tree": DecisionTreeClassifier(),
-        "Random Forest": RandomForestClassifier(),
-        "Naive Bayes": GaussianNB(),
-        "SVM": SVC(),
-        "KNN": KNeighborsClassifier()
-    }
-
-    model_choice = st.selectbox("Select Model", list(models.keys()))
-    model = models[model_choice]
-
-    # Train & evaluate
-    model.fit(X_train, y_train)
-    preds = model.predict(X_test)
-    acc = accuracy_score(y_test, preds) * 100
-
-    st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
-
-    # Feature importance for tree-based models
-    if model_choice in ["Decision Tree", "Random Forest"]:
-        st.write("### 🔎 Feature Importance")
-        feature_importances = pd.Series(
-            model.feature_importances_,
-            index=df.drop(columns=[target_col]).columns
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
         )
-        fig, ax = plt.subplots()
-        feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
-        st.pyplot(fig)
+
+        models = {
+            "Logistic Regression": LogisticRegression(max_iter=500),
+            "Decision Tree": DecisionTreeClassifier(),
+            "Random Forest": RandomForestClassifier(),
+            "Naive Bayes": GaussianNB(),
+            "SVM": SVC(),
+            "KNN": KNeighborsClassifier()
+        }
+
+        model_choice = st.selectbox("Select Model", list(models.keys()))
+        model = models[model_choice]
+
+        # Train & evaluate
+        model.fit(X_train, y_train)
+        preds = model.predict(X_test)
+        acc = accuracy_score(y_test, preds) * 100
+
+        st.success(f"✅ {model_choice} Accuracy: {acc:.2f}%")
+
+        # Feature importance for tree-based models
+        if model_choice in ["Decision Tree", "Random Forest"]:
+            st.write("### 🔎 Feature Importance")
+            feature_importances = pd.Series(
+                model.feature_importances_,
+                index=df.drop(columns=[target_col]).columns
+            )
+            fig, ax = plt.subplots()
+            feature_importances.sort_values(ascending=False).head(10).plot(kind="bar", ax=ax)
+            st.pyplot(fig)
 
 else:
     st.info("👆 Upload a CSV file to get started.")
-
-
-    
