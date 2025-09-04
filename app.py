@@ -182,6 +182,9 @@ if uploaded_file is not None:
                 X[col] = le.fit_transform(X[col].astype(str))
                 label_encoders[col] = le
 
+        # 🔑 Ensure all features are numeric
+        X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+
         # Scale numeric
         scaler = StandardScaler()
         X = scaler.fit_transform(X)
